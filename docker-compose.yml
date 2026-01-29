@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  vllm-flashtensors:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vllm-flashtensors
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persistent model storage
+      - ./models:/models
+      # Shared memory for fast loading
+      - /dev/shm:/dev/shm
+      # HuggingFace cache (optional, for faster downloads)
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - USER=root
+      - LD_LIBRARY_PATH=/usr/local/lib/python3.12/dist-packages/flashtensors:$LD_LIBRARY_PATH
+      # Required for flashtensors vLLM integration
+      - VLLM_USE_V1=0
+      # Disable distributed/parallel for single GPU
+      - VLLM_WORKER_MULTIPROC_METHOD=spawn
+      - CUDA_DEVICE_ORDER=PCI_BUS_ID
+      # Max context window (reduce for larger models to fit in GPU memory)
+      - VLLM_MAX_MODEL_LEN=4096
+      # HuggingFace token for private models (optional)
+      # - HF_TOKEN=your_token_here
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # Important for performance
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    # Restart policy
+    restart: unless-stopped
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
